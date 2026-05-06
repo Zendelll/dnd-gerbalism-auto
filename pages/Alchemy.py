@@ -1,80 +1,125 @@
 import streamlit as st
-from random import randint
-import requests
-from scripts.sidebar import init_sidebar
-st.set_page_config(
-    page_title="Алхимия", 
-    page_icon="⚗️"
+from utils.utils import Data, Sidebar
+import utils.constans as c
+from utils.models import (
+    Plant,
+    PotionTypeEnum,
+    EffectTypeEnum,
 )
-init_sidebar()
-st.header("⚗️ Алхимия")
 
-POISON_NAME = "Яд"
-POTION_NAME = "Зелье"
-MAGIC_NAME = "Магическое зелье"
-PLANTS_TABLE_URL = "https://raw.githubusercontent.com/Zendelll/dnd-gerbalism-auto/master/tables/plants_table.json"
-PLANTS_TABLE = requests.get(PLANTS_TABLE_URL).json()
+st.set_page_config(page_title="Alchemy", page_icon="⚗️")
+DATA = Data()
+Sidebar(DATA.translation)
+TRANSLATION = DATA.translation
+KEY_WORDS = TRANSLATION["key_words"]
+STARTER_ALCHEMY_DIFFICULTY = 10
 
-def get_plants(alchemy_type, type, blacklist = []):
-    """alchemy_type - potion, poison или magic
-    type - mod или effec
-    blacklist - лист трав, которые не надо отображать
-    """
-    if alchemy_type == "magic":
-        magic = [""]
-        for name, property in PLANTS_TABLE.items():
-            if property["alch_effect"] == "magic" and name != "Элементальная вода" and name not in blacklist:
-                magic.append(name)
-        return magic
-    elif type == "effect": 
-        effect = [""]
-        for name, property in PLANTS_TABLE.items():
-            if property["alch_effect"] == "effect" and (property["alch_type"] == alchemy_type or property["alch_type"] == "all") and name not in blacklist:
-                effect.append(name)
-        return effect
-    else:
-        mod = [""]
-        for name, property in PLANTS_TABLE.items():
-            if property["alch_effect"] == "mod" and (property["alch_type"] == alchemy_type or property["alch_type"] == "all") and name not in blacklist:
-                mod.append(name)
-        return mod
 
-def write_properties(selected_effect, selected_mod = None, starter_difficulty = 10):
-    difficulty = starter_difficulty
-    if selected_effect in PLANTS_TABLE:
-        st.success(PLANTS_TABLE[selected_effect]["effect"])
-        difficulty += PLANTS_TABLE[selected_effect]["difficulty"]
-    if selected_mod:
-        for name in selected_mod:
-            if name in PLANTS_TABLE:
-                st.warning(PLANTS_TABLE[name]["effect"])
-                difficulty += PLANTS_TABLE[name]["difficulty"]
-    st.error(f"Сложность создания - {difficulty}")
+def clear_modifier_selectors(starting_index: int = 0):
+    for i in range(starting_index, 3):
+        st.session_state[f"mod{i}"] = False
+
 
 if __name__ == "__main__":
-    alchemy_type = st.selectbox('Выбери тип:', (POTION_NAME, POISON_NAME, MAGIC_NAME))
-    if alchemy_type == POTION_NAME:
-        alchemy_type_eng = "potion"
-    elif alchemy_type == POISON_NAME:
-        alchemy_type_eng = "poison"
-    elif alchemy_type == MAGIC_NAME:
-        alchemy_type_eng = "magic"
+    st.header(TRANSLATION["pages"]["alchemy"])
 
-    if alchemy_type_eng == "magic":
-        effect = get_plants(alchemy_type_eng, "effect")
-        effect.sort()
-        st.selectbox('Базовый ингридент:', ["Элементальная вода"])
-        selected_effect = st.selectbox('Основной ингридент:', effect)
-        write_properties(selected_effect, starter_difficulty=13)
-    else:
-        effect = get_plants(alchemy_type_eng, "effect", ["Кровьтрава"])
-        effect.sort()
-        bloodgrass = None
-        if alchemy_type_eng == "potion":
-            bloodgrass = st.checkbox("Кровьтрава")
-        selected_effect = st.selectbox('Основной ингридент:', effect)
-        mod = get_plants(alchemy_type_eng, "mod")
-        mod.sort()
-        selected_mod = [st.selectbox('Модификатор 1:', mod), st.selectbox('Модификатор 2:', mod), st.selectbox('Модификатор 3:', mod)]
-        if bloodgrass: selected_mod.insert(0, 'Кровьтрава')
-        write_properties(selected_effect, selected_mod)
+    # Alchemy type selector
+    alchemy_type = st.selectbox(
+        label=TRANSLATION["text"]["potion_type_selector"],
+        options=[
+            potion_type
+            for potion_type in PotionTypeEnum
+            if potion_type != PotionTypeEnum.all
+        ],
+        format_func=lambda potion_type: KEY_WORDS["potion_type"][potion_type.value],
+    )
+
+    # Plants with selected alchemy type
+    # We not want bloodgrass here, because it handled separately
+    related_plants = [
+        plant
+        for plant in DATA.plants.values()
+        if (
+            plant.potion_type == alchemy_type
+            or (
+                alchemy_type != PotionTypeEnum.magic
+                and plant.potion_type == PotionTypeEnum.all
+            )
+        )
+        and plant != DATA.plants[c.BLOODGRASS]
+    ]
+
+    # Unique plant that can be used as a second base in a potion
+    bloodgrass = None
+    if alchemy_type == PotionTypeEnum.potion:
+        bloodgrass = st.checkbox(DATA.plants[c.BLOODGRASS].name)
+
+    # Base plant selector
+    modifiers = []
+    base = st.selectbox(
+        label=TRANSLATION["text"]["potion_base_ingredient_selector"],
+        options=[""]
+        + sorted(
+            [
+                plant
+                for plant in related_plants
+                if plant.effect_type == EffectTypeEnum.base
+            ],
+            key=lambda plant: plant.name,
+        ),
+        format_func=lambda plant: plant.name if isinstance(plant, Plant) else plant,
+        on_change=clear_modifier_selectors,
+    )
+
+    # Modifiers selectors. 1 for magic potions, 3 for regular potions and poisons
+    # Only Milkweed seeds and Quicksilver lichen can stack
+    for mod_count in range(0, 3 if alchemy_type != PotionTypeEnum.magic else 1):
+        modifiers.append(
+            st.selectbox(
+                label=f"{TRANSLATION["text"]["modifier_selector"]} {mod_count+1}:",
+                options=[""]
+                + sorted(
+                    [
+                        plant
+                        for plant in related_plants
+                        if plant.effect_type == EffectTypeEnum.modifier
+                        and (
+                            plant not in modifiers
+                            or plant == DATA.plants[c.MILKWEED_SEEDS]
+                            or plant == DATA.plants[c.QUICKSILVER_LICHEN]
+                        )
+                    ],
+                    key=lambda plant: plant.name,
+                ),
+                format_func=lambda plant: (
+                    plant.name if isinstance(plant, Plant) else plant
+                ),
+                disabled=not isinstance(base, Plant)
+                or (
+                    len(modifiers) > 0
+                    and not isinstance(modifiers[len(modifiers) - 1], Plant)
+                ),
+                key=f"mod{mod_count}",
+                on_change=clear_modifier_selectors,
+                kwargs={"starting_index": mod_count + 1},
+            )
+        )
+
+    difficulty = STARTER_ALCHEMY_DIFFICULTY
+
+    # Write info of a base and potentonally bloodgrass
+    if isinstance(base, Plant):
+        st.success(base.effect_description)
+        difficulty += base.difficulty_modifier
+    if bloodgrass:
+        st.success(DATA.plants[c.BLOODGRASS].effect_description)
+
+    # Write info of every selected modifier
+    for modifier in modifiers:
+        if isinstance(modifier, Plant):
+            st.warning(modifier.effect_description)
+            difficulty += modifier.difficulty_modifier
+
+    # Write resulting DC
+    if isinstance(base, Plant):
+        st.error(TRANSLATION["text"]["alchemy_dc"] + str(difficulty))
