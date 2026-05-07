@@ -82,6 +82,10 @@ class Plant(BaseModel):
         ]
     ]
 
+class RolledPlant(BaseModel):
+    plant: Plant | TerrainRollTable
+    quantity: int
+    additional_info: Optional[str] = None
 
 class TerrainRollTable(BaseModel):
     terrain_type: Literal[
@@ -122,7 +126,4 @@ class TerrainRollTable(BaseModel):
         return rolled_plant
 
 
-class RolledPlant(BaseModel):
-    plant: Plant | TerrainRollTable
-    quantity: int
-    additional_info: Optional[str] = None
+
