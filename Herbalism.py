@@ -3,7 +3,6 @@ from utils.utils import Data, Sidebar, write_plant_info
 import utils.constans as c
 from utils.models import (
     TerrainTypesEnum,
-    PotionTypeEnum,
     RolledPlant,
 )
 
