@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from random import randint
 from enum import Enum
-from typing import Optional
+from typing import Optional, Any
 from typing_extensions import Literal
 
 
@@ -83,7 +83,7 @@ class Plant(BaseModel):
     ]
 
 class RolledPlant(BaseModel):
-    plant: Plant | TerrainRollTable
+    plant: Any
     quantity: int
     additional_info: Optional[str] = None
 
