@@ -12,5 +12,4 @@ if __name__ == "__main__":
         "https://forms.yandex.ru/u/6574f103d04688604bcc834d/",
         width=700,
         height=800,
-        scrolling=True,
     )
